@@ -1,6 +1,7 @@
 from random import randrange, sample
 import torch
 import torch_geometric.data as tgdata
+import torch_geometric.utils as tgutils
 
 def structurally_perturb(graph: tgdata.Data, m_nodes: int, n_cliques: int) -> tuple[tgdata.Data, torch.Tensor]:
     """
@@ -20,7 +21,6 @@ def structurally_perturb(graph: tgdata.Data, m_nodes: int, n_cliques: int) -> tu
     
     new_graph = graph.clone() # May not be necessary be for now to maintain the original graph
     
-    # TODO: This does not necessarily choose unique nodes for each clique not sure if that's something we want
     anomalous_nodes = torch.randint(0, graph.num_nodes, (n_cliques, m_nodes), device=graph.edge_index.device)
     
     # Alternative that ensures unique nodes *within* each clique, not across cliques
@@ -30,7 +30,7 @@ def structurally_perturb(graph: tgdata.Data, m_nodes: int, n_cliques: int) -> tu
     # anomalous_nodes = torch.randperm(graph.num_nodes, device=graph.edge_index.device)[:m_nodes * n_cliques].reshape(n_cliques, m_nodes)
     
     # Creates a set of tuples to represent the edges to prevent duplicates
-    graph_edges = set(map(tuple, new_graph.edge_index.T.tolist()))
+    anomalous_edges = set()
     
     # Iterate through the cliques
     for clique in anomalous_nodes:
@@ -38,11 +38,14 @@ def structurally_perturb(graph: tgdata.Data, m_nodes: int, n_cliques: int) -> tu
         for i, node in enumerate(clique):
             # Create edges between the nodes in the clique
             for j in range(i + 1, len(clique)):
-                graph_edges.add((node.item(), clique[j].item())) # Pytorch represents undirected edges as (u, v) and (v, u)
-                graph_edges.add((clique[j].item(), node.item())) # Add the reverse edge as well
+                anomalous_edges.add((node.item(), clique[j].item())) # Pytorch represents undirected edges as (u, v) and (v, u)
+                anomalous_edges.add((clique[j].item(), node.item())) # Add the reverse edge as well
                 
     # Convert the set of edges back to a tensor
-    new_graph.edge_index = torch.tensor(list(graph_edges), dtype=torch.long).T
+    anomalous_edges = torch.tensor(list(anomalous_edges), device=graph.edge_index.device).T
+    new_graph.edge_index = torch.concat([new_graph.edge_index, anomalous_edges], dim=1)
+    # Coalese sorts the edges and removes duplicates prevents having to convert to a list and set and back to a tensor
+    new_graph.edge_index, new_graph.edge_attr = tgutils.coalesce(new_graph.edge_index, new_graph.edge_attr, graph.num_nodes, graph.num_nodes)
     
     return new_graph, anomalous_nodes
 
