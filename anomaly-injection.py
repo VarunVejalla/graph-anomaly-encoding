@@ -49,6 +49,47 @@ def structurally_perturb(graph: tgdata.Data, m_nodes: int, n_cliques: int) -> tu
     
     return new_graph, anomalous_nodes
 
+def attribute_perturb(graph: tgdata.Data, n_nodes: int) -> tuple[tgdata.Data, torch.Tensor]:
+    """
+    Samples n_nodes negative edges from the graph and replaces the features of the source nodes with the target nodes.
+    
+    Negative sampling is used to get attributes of the target nodes (at least not a neighboring node) and replace the
+    source node's features with the target node's features. This will place the target node's features "out of place"
+    because the target and source nodes are at least not connected, but could be even further apart.
+    
+    Args:
+        graph (tgdata.Data): The original graph.
+        n_nodes (int): The number of nodes to sample.
+        
+    Returns:
+        tuple[tgdata.Data, torch.Tensor]: A tuple containing the new graph and the tensor of anomalous nodes.
+        
+    Raises:
+        ValueError: If the graph does not have node features.
+    """
+    
+    # NOTE: This is a tradeoff for time, instead of getting the node that has the farthest l2 distance, we just sample
+    #      a random node that is not connected to the source node.
+    
+    sampled = tgutils.negative_sampling(graph.edge_index, num_nodes=graph.num_nodes, num_neg_samples=n_nodes)
+    while sampled[0].unique().shape[0] != n_nodes:
+        # Ensure that the src nodes are unique
+        print("Resampling...")
+        sampled = tgutils.negative_sampling(graph.edge_index, num_nodes=graph.num_nodes, num_neg_samples=n_nodes)
+    
+    # Anomalous nodes are the source nodes, other node's features are copeid to the anomalous nodes
+    anomalous_nodes = sampled[0]
+    normal_nodes = sampled[1]
+    new_graph = graph.clone()
+    
+    # Check if the graph has node features
+    if graph.x is None:
+        raise ValueError("Graph does not have node features.")
+    
+    # Copy the node features of the normal nodes to the anomalous nodes
+    new_graph.x[anomalous_nodes] = graph.x[normal_nodes]
+    return new_graph, anomalous_nodes
+
 
 def inject_anomalies(data, num_struct_anomalies, struct_anomaly_size, num_context_anomalies):
     # adds in anomalies
