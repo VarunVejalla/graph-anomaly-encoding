@@ -19,7 +19,15 @@ def structurally_perturb(graph: tgdata.Data, m_nodes: int, n_cliques: int) -> tu
     """ 
     
     new_graph = graph.clone() # May not be necessary be for now to maintain the original graph
+    
+    # TODO: This does not necessarily choose unique nodes for each clique not sure if that's something we want
     anomalous_nodes = torch.randint(0, graph.num_nodes, (n_cliques, m_nodes), device=graph.edge_index.device)
+    
+    # Alternative that ensures unique nodes *within* each clique, not across cliques
+    # anomalous_nodes = torch.stack([torch.randperm(graph.num_nodes, device=graph.edge_index.device)[:m_nodes] for _ in range(n_cliques)])
+    
+    # Alternative that ensures all nodes are unique but requires m*n < num_nodes
+    # anomalous_nodes = torch.randperm(graph.num_nodes, device=graph.edge_index.device)[:m_nodes * n_cliques].reshape(n_cliques, m_nodes)
     
     # Creates a set of tuples to represent the edges to prevent duplicates
     graph_edges = set(map(tuple, new_graph.edge_index.T.tolist()))
