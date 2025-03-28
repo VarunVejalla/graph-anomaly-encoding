@@ -1,5 +1,5 @@
 import os
-
+import torch_geometric
 import torch
 import torch.nn as nn
 from torch.optim import Adam
@@ -38,3 +38,24 @@ for epoch in range(args.epoch):
                                         data.test_pos_edge_index,
                                         data.test_neg_edge_index)
         print("Epoch {} - Loss: {} ROC_AUC: {} Precision: {}".format(epoch, loss.cpu().item(), roc_auc, ap))
+        
+# Load anomalous graph
+data = torch.load("../../cora_anomalous_graph.pt", weights_only=False)
+# Get the adjacency matrix of the anomalous graph
+orignal_adjacency = torch.squeeze(torch_geometric.utils.to_dense_adj(data.edge_index))
+# Get the predicted adjacency matrix (link prediction) of the anomalous graph
+pred_adjacency = model.forward(data.x, data.edge_index)
+# Get the top 296 anomalous nodes (nodes encoded with the highest error)
+anomalous = torch.argsort(torch.sum(torch.abs(pred_adjacency - orignal_adjacency), dim=1), descending=True)[:296]
+# Load the ground truth anomalous nodes
+anomalous_nodes = torch.load("../../cora_anomalous_nodes.pt", weights_only=False)
+
+# Loop through the top 296 anomalous nodes and compare with the ground truth anomalous nodes
+correct = 0
+incorrect = 0
+for node in anomalous:
+    if node in anomalous_nodes:
+        correct += 1
+    else:
+        incorrect += 1
+        
