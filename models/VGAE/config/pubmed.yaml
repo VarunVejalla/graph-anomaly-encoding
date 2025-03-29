@@ -1,0 +1,8 @@
+dataset: "PubMed"
+
+enc_in_channels: 500
+enc_hidden_channels: 32
+enc_out_channels: 16
+
+lr: 0.01
+epoch: 400

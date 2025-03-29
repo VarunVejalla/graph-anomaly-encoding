@@ -41,24 +41,34 @@ for epoch in range(args.epoch):
         print("Epoch {} - Loss: {} ROC_AUC: {} Precision: {}".format(epoch, loss.cpu().item(), roc_auc, ap))
         
 # Load anomalous graph
-data = torch.load("../../cora_anomalous_graph.pt", weights_only=False)
+data = torch.load("../../perturbed_data/CiteSeer/perturbed_data.pt", weights_only=False).to(device)
+# data = torch.load("../../pubmed_anomalous_graph.pt", weights_only=False).to(device)
 # Get the adjacency matrix of the anomalous graph
 orignal_adjacency = torch.squeeze(torch_geometric.utils.to_dense_adj(data.edge_index))
 # Get the predicted adjacency matrix (link prediction) of the anomalous graph
 pred_adjacency = model.forward(data.x, data.edge_index)
 # Get the top 296 anomalous nodes (nodes encoded with the highest error)
-anomalous = torch.argsort(torch.sum(torch.abs(pred_adjacency - orignal_adjacency), dim=1), descending=True)[:296]
+anomalous = torch.argsort(torch.sum(torch.abs(pred_adjacency - orignal_adjacency), dim=1), descending=True)[:331]
 # Load the ground truth anomalous nodes
-anomalous_nodes = torch.load("../../cora_anomalous_nodes.pt", weights_only=False)
+# anomalous_nodes = torch.load("../../cora_anomalous_nodes.pt", weights_only=False)
+att_anomalies = torch.load("../../perturbed_data/CiteSeer/att_anomalies.pt", weights_only=False).to(device)
+struct_anomalies = torch.load("../../perturbed_data/CiteSeer/struct_anomalies.pt", weights_only=False).to(device)
 
-print(anomalous_nodes.unique().shape)
+att_true_one_hot_repr = torch.zeros(data.x.size(0))
+att_true_one_hot_repr[att_anomalies] = 1
+struct_true_one_hot_repr = torch.zeros(data.x.size(0))
+struct_true_one_hot_repr[struct_anomalies] = 1
 
+all_anomalies = torch.cat((att_anomalies, struct_anomalies), dim=0).unique()
 true_one_hot_repr = torch.zeros(data.x.size(0))
-true_one_hot_repr[anomalous_nodes] = 1
+true_one_hot_repr[all_anomalies] = 1
+
 pred_one_hot_repr = torch.zeros(data.x.size(0))
 pred_one_hot_repr[anomalous] = 1
 
 # print the classification report
+print(classification_report(struct_true_one_hot_repr, pred_one_hot_repr, target_names=["Normal", "Structural Anomalous"]))
+print(classification_report(att_true_one_hot_repr, pred_one_hot_repr, target_names=["Normal", "Attribute Anomalous"]))
 print(classification_report(true_one_hot_repr, pred_one_hot_repr, target_names=["Normal", "Anomalous"]))
 # This is honestly pretty on par with the results from the paper
 # This usually gets an f1-score of about ~0.2 which is pretty good for a simple model

@@ -3,35 +3,26 @@ import torch
 import torch_geometric.data as tgdata
 import torch_geometric.utils as tgutils
 
-def structurally_perturb(graph: tgdata.Data, m_nodes: int, n_cliques: int) -> tuple[tgdata.Data, torch.Tensor]:
+def structurally_perturb(graph: tgdata.Data, anomalous_nodes: torch.Tensor, clique_size: int) -> tuple[tgdata.Data, torch.Tensor]:
     """
-    Create a new graph by selecting m_nodes and creating a fully connected clique, repeat n_cliques times.
-    
-    Note: Anomalous nodes are returned as a tensor of shape (n_cliques, m_nodes), to get anomalous nodes, flatten
-        the tensor and get the unqiue indexes.
-    
+    Creates cliques of anomalous nodes in the graph.
+
     Args:
-        graph (tgdata.Data): The original graph.
-        m_nodes (int): The number of nodes in each clique.
-        n_cliques (int): The number of cliques to create.
-        
+        graph (tgdata.Data): The input graph.
+        anomalous_nodes (torch.Tensor): The nodes to create cliques for.
+        clique_size (int): The size of the cliques to create.
+    
     Returns:
-        tuple[tgdata.Data, torch.Tensor]: A tuple containing the new graph and the tensor of anomalous nodes.
+        tuple: A tuple containing the new graph and the anomalous nodes.
     """ 
     
-    new_graph = graph.clone() # May not be necessary be for now to maintain the original graph
-    
-    # anomalous_nodes = torch.randint(0, graph.num_nodes, (n_cliques, m_nodes), device=graph.edge_index.device)
-    
-    # Alternative that ensures unique nodes *within* each clique, not across cliques
-    # anomalous_nodes = torch.stack([torch.randperm(graph.num_nodes, device=graph.edge_index.device)[:m_nodes] for _ in range(n_cliques)])
-    
-    # Alternative that ensures all nodes are unique but requires m*n < num_nodes
-    anomalous_nodes = torch.randperm(graph.num_nodes, device=graph.edge_index.device)[:m_nodes * n_cliques].reshape(n_cliques, m_nodes)
-    
+    new_graph = graph.clone()
+
+    # Reshape the anomalous nodes to be (-1, clique_size) the -1 will be the number of cliques and is inferred by pytorch
+    anomalous_nodes = anomalous_nodes.reshape(-1, clique_size) 
+    print("Anomalous nodes shape:", anomalous_nodes.shape)
     # Creates a set of tuples to represent the edges to prevent duplicates
     anomalous_edges = set()
-    
     # Iterate through the cliques
     for clique in anomalous_nodes:
         # Iterate through the nodes in each clique
@@ -40,88 +31,79 @@ def structurally_perturb(graph: tgdata.Data, m_nodes: int, n_cliques: int) -> tu
             for j in range(i + 1, len(clique)):
                 anomalous_edges.add((node.item(), clique[j].item())) # Pytorch represents undirected edges as (u, v) and (v, u)
                 anomalous_edges.add((clique[j].item(), node.item())) # Add the reverse edge as well
-                
+    
     # Convert the set of edges back to a tensor
     anomalous_edges = torch.tensor(list(anomalous_edges), device=graph.edge_index.device).T
-    new_graph.edge_index = torch.concat([new_graph.edge_index, anomalous_edges], dim=1)
+    new_graph.edge_index = torch.concat([graph.edge_index, anomalous_edges], dim=1)
+
     # Coalese sorts the edges and removes duplicates prevents having to convert to a list and set and back to a tensor
-    new_graph.edge_index, new_graph.edge_attr = tgutils.coalesce(new_graph.edge_index, new_graph.edge_attr, graph.num_nodes, graph.num_nodes)
-    
-    return new_graph, anomalous_nodes
+    new_graph.edge_index, new_graph.edge_attr = tgutils.coalesce(new_graph.edge_index, new_graph.edge_attr, graph.num_nodes)
+    return new_graph, anomalous_nodes.flatten()
 
-def attribute_perturb(graph: tgdata.Data, n_nodes: int) -> tuple[tgdata.Data, torch.Tensor]:
+def attribute_perturb(graph: tgdata.Data, anomalous_nodes: torch.Tensor, k_nodes: int) -> tuple[tgdata.Data, torch.Tensor]:
     """
-    Samples n_nodes negative edges from the graph and replaces the features of the source nodes with the target nodes.
-    
-    Negative sampling is used to get attributes of the target nodes (at least not a neighboring node) and replace the
-    source node's features with the target node's features. This will place the target node's features "out of place"
-    because the target and source nodes are at least not connected, but could be even further apart.
-    
+    Replaces the features of the anomalous nodes with the features of the farthest node in a set of k samples.
+
     Args:
-        graph (tgdata.Data): The original graph.
-        n_nodes (int): The number of nodes to sample.
-        
+        graph (tgdata.Data): The input graph.
+        anomalous_nodes (torch.Tensor): The nodes to replace features for.
+        k_nodes (int): The number of nodes to sample.
+
     Returns:
-        tuple[tgdata.Data, torch.Tensor]: A tuple containing the new graph and the tensor of anomalous nodes.
-        
-    Raises:
-        ValueError: If the graph does not have node features.
+        tuple: A tuple containing the new graph and the anomalous nodes.
     """
     
-    # NOTE: This is a tradeoff for time, instead of getting the node that has the farthest l2 distance, we just sample
-    #      a random node that is not connected to the source node.
-    
-    sampled = tgutils.negative_sampling(graph.edge_index, num_nodes=graph.num_nodes, num_neg_samples=n_nodes)
-    while sampled[0].unique().shape[0] != n_nodes:
-        # Ensure that the src nodes are unique
-        print("Resampling...")
-        sampled = tgutils.negative_sampling(graph.edge_index, num_nodes=graph.num_nodes, num_neg_samples=n_nodes)
-    
-    # Anomalous nodes are the source nodes, other node's features are copeid to the anomalous nodes
-    anomalous_nodes = sampled[0]
-    normal_nodes = sampled[1]
     new_graph = graph.clone()
-    
-    # Check if the graph has node features
-    if graph.x is None:
-        raise ValueError("Graph does not have node features.")
-    
-    # Copy the node features of the normal nodes to the anomalous nodes
-    new_graph.x[anomalous_nodes] = graph.x[normal_nodes]
+    # Sample k nodes for each anomalous node
+    k_samples = torch.randint(0, graph.num_nodes, (anomalous_nodes.shape[0], k_nodes), device=graph.edge_index.device)
+    # For each anamolous node, find the node in the k_samples that has the farthest l2 distance
+    k_features = graph.x[k_samples] # Get the features of the k samples
+    anomalous_features = graph.x[anomalous_nodes] # Get the features of the anomalous nodes
+    # Get the l2 distance between the anomalous node and the k samples
+    l2_distance = torch.linalg.norm(k_features - anomalous_features.unsqueeze(1), dim=2)
+    print("L2 distance shape:", l2_distance.shape)
+    # Get the index of the farthest node
+    farthest_node = torch.argmax(l2_distance, dim=1)
+    # Get the features of the farthest node
+    farthest_features = k_features[torch.arange(k_samples.shape[0]), farthest_node]
+    new_graph.x[anomalous_nodes] = farthest_features
+
     return new_graph, anomalous_nodes
 
 
-def inject_anomalies(data, num_struct_anomalies, struct_anomaly_size, num_context_anomalies):
-    # adds in anomalies
-    # num_struct_anomalies * struct_anomaly_size == num_context_anomalies maybe
-    
-    # TODO: ensure no overlap between cliques? idk if this is needed or not
-    for _ in range(num_struct_anomalies):
-        clique = sample(range(data.num_nodes), struct_anomaly_size)
-        
-        # TODO
-        for i in clique:
-            for j in clique:
-                if i == j:
-                    continue
-                
-                # add edge from i to j
-                data.put_edge_index()
-    
-    # TODO: should edges be undirected?
-        
-    
-    # TODO: idk if there should be no overlap between structural anomalies and contextual anomalies either
-    
-    context_anomalies = set()
-    for _ in range(data.num_nodes):
-        # choose random index that wasn't chosen before
-        ri = randrange(data.num_nodes)
-        while ri in context_anomalies:
-            ri = randrange(data.num_nodes)
-        
-        # TODO: perturb data.x[ri]
-        
-        context_anomalies.add(ri)
-    
-    return -1
+def inject_anomalies(graph: tgdata.Data, 
+                     percent_structural: float,
+                     percent_attribute: float,
+                     clique_size: int=5) -> tuple[tgdata.Data, torch.Tensor, torch.Tensor]:
+    """
+    Injects anomalies into the graph by creating cliques and replacing node features.
+
+    Args:
+        graph (tgdata.Data): The input graph.
+        percent_structural (float): The percentage of structural anomalies to inject.
+        percent_attribute (float): The percentage of attribute anomalies to inject.
+        clique_size (int): The size of the cliques to create.
+
+    Returns:
+        tuple: A tuple containing the new graph, the structural anomalies, and the attribute anomalies.
+    """
+
+    total_anomalies = int(graph.num_nodes * (percent_structural + percent_attribute))
+    num_structural = int(total_anomalies * percent_structural)
+    num_attribute = int(total_anomalies * percent_attribute)
+    num_cliques = num_structural // clique_size
+    if num_cliques * clique_size < num_structural:
+        # If the number of structural anomalies is not divisible by the clique size, add
+        # the remainder of the structural anomalies to the number of attribute anomalies
+        num_attribute += num_structural - (num_cliques * clique_size)
+        num_structural = num_cliques * clique_size
+
+    # Ensures all anomalous nodes are unique
+    anomalous_nodes = torch.randperm(graph.num_nodes, device=graph.edge_index.device)[:total_anomalies]
+    # Create the structural anomalies
+    new_graph, structural_anomalies = structurally_perturb(graph, anomalous_nodes[:num_structural], clique_size)
+
+    # Create the attribute anomalies
+    new_graph, attribute_anomalies = attribute_perturb(new_graph, anomalous_nodes[num_structural:], 50)
+    return new_graph, structural_anomalies, attribute_anomalies
+
