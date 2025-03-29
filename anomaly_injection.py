@@ -19,12 +19,12 @@ def structurally_perturb(graph: tgdata.Data, anomalous_nodes: torch.Tensor, cliq
     new_graph = graph.clone()
 
     # Reshape the anomalous nodes to be (-1, clique_size) the -1 will be the number of cliques and is inferred by pytorch
-    anomalous_nodes = anomalous_nodes.reshape(-1, clique_size) 
-    print("Anomalous nodes shape:", anomalous_nodes.shape)
+    nodes_in_cliques = anomalous_nodes.reshape(-1, clique_size) 
+    print("Anomalous nodes shape:", nodes_in_cliques.shape)
     # Creates a set of tuples to represent the edges to prevent duplicates
     anomalous_edges = set()
     # Iterate through the cliques
-    for clique in anomalous_nodes:
+    for clique in nodes_in_cliques:
         # Iterate through the nodes in each clique
         for i, node in enumerate(clique):
             # Create edges between the nodes in the clique
@@ -38,7 +38,7 @@ def structurally_perturb(graph: tgdata.Data, anomalous_nodes: torch.Tensor, cliq
 
     # Coalese sorts the edges and removes duplicates prevents having to convert to a list and set and back to a tensor
     new_graph.edge_index, new_graph.edge_attr = tgutils.coalesce(new_graph.edge_index, new_graph.edge_attr, graph.num_nodes)
-    return new_graph, anomalous_nodes.flatten()
+    return new_graph, anomalous_nodes
 
 def attribute_perturb(graph: tgdata.Data, anomalous_nodes: torch.Tensor, k_nodes: int) -> tuple[tgdata.Data, torch.Tensor]:
     """
@@ -61,7 +61,6 @@ def attribute_perturb(graph: tgdata.Data, anomalous_nodes: torch.Tensor, k_nodes
     anomalous_features = graph.x[anomalous_nodes] # Get the features of the anomalous nodes
     # Get the l2 distance between the anomalous node and the k samples
     l2_distance = torch.linalg.norm(k_features - anomalous_features.unsqueeze(1), dim=2)
-    print("L2 distance shape:", l2_distance.shape)
     # Get the index of the farthest node
     farthest_node = torch.argmax(l2_distance, dim=1)
     # Get the features of the farthest node
@@ -87,17 +86,21 @@ def inject_anomalies(graph: tgdata.Data,
     Returns:
         tuple: A tuple containing the new graph, the structural anomalies, and the attribute anomalies.
     """
-
-    total_anomalies = int(graph.num_nodes * (percent_structural + percent_attribute))
-    num_structural = int(total_anomalies * percent_structural)
-    num_attribute = int(total_anomalies * percent_attribute)
+    
+    # Calculate the number of structural and attribute anomalies
+    num_structural = int(graph.num_nodes * percent_structural)
+    num_attribute = int(graph.num_nodes * percent_attribute)
+    total_anomalies = num_structural + num_attribute
     num_cliques = num_structural // clique_size
     if num_cliques * clique_size < num_structural:
         # If the number of structural anomalies is not divisible by the clique size, add
         # the remainder of the structural anomalies to the number of attribute anomalies
         num_attribute += num_structural - (num_cliques * clique_size)
         num_structural = num_cliques * clique_size
-
+    
+    print("Number of structural anomalies:", num_structural)
+    print("Number of attribute anomalies:", num_attribute)
+    print("Total anomalies:", total_anomalies)
     # Ensures all anomalous nodes are unique
     anomalous_nodes = torch.randperm(graph.num_nodes, device=graph.edge_index.device)[:total_anomalies]
     # Create the structural anomalies
@@ -107,3 +110,39 @@ def inject_anomalies(graph: tgdata.Data,
     new_graph, attribute_anomalies = attribute_perturb(new_graph, anomalous_nodes[num_structural:], 50)
     return new_graph, structural_anomalies, attribute_anomalies
 
+def main():
+    """
+    Main function to inject anomalies into a graph, and save the results.
+    """
+
+    import os
+    import argparse
+    import torch_geometric.transforms as T
+    from torch_geometric.datasets import Planetoid
+
+    parser = argparse.ArgumentParser(description="Anomaly Injection")
+    parser.add_argument("--dataset", type=str, default="Cora", help="Dataset name")
+    parser.add_argument("--percent_structural", type=float, default=0.025, help="Percentage of structural anomalies to inject")
+    parser.add_argument("--percent_attribute", type=float, default=0.025, help="Percentage of attribute anomalies to inject")
+    parser.add_argument("--clique_size", type=int, default=5, help="Size of the cliques to create")
+    
+    args = parser.parse_args()
+    os.makedirs(f"perturbed_data/{args.dataset}", exist_ok=True)
+    os.makedirs("datasets", exist_ok=True)
+    dataset = Planetoid(f"datasets", args.dataset, transform=T.NormalizeFeatures())
+    data = dataset[0]
+    data = data.to(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+    # Create the anomalies
+    new_graph, struct_anomalies, att_anomalies = inject_anomalies(data, args.percent_structural, args.percent_attribute, args.clique_size)
+    # Save the anomalies
+    torch.save(new_graph, f"perturbed_data/{args.dataset}/perturbed_data.pt")
+    torch.save(struct_anomalies, f"perturbed_data/{args.dataset}/struct_anomalies.pt")
+    torch.save(att_anomalies, f"perturbed_data/{args.dataset}/att_anomalies.pt")
+    with open(f"perturbed_data/{args.dataset}/anomalies.txt", "w") as f:
+        f.write(f"Structural anomalies ({args.percent_structural}%): {struct_anomalies.shape}\n")
+        f.write(f"Attribute anomalies ({args.percent_attribute}%): {att_anomalies.shape}\n")
+        f.write(f"Total anomalies: {struct_anomalies.shape[0] + att_anomalies.shape[0]}\n")
+    print(f"Anomalies saved to perturbed_data/{args.dataset}/anomalies.txt")
+
+if __name__ == "__main__":
+    main()

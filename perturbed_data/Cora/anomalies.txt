@@ -1,0 +1,3 @@
+Structural anomalies (0.025%): torch.Size([65])
+Attribute anomalies (0.025%): torch.Size([69])
+Total anomalies: 134
