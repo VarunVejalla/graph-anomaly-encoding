@@ -139,8 +139,10 @@ def main():
     torch.save(struct_anomalies, f"perturbed_data/{args.dataset}/struct_anomalies.pt")
     torch.save(att_anomalies, f"perturbed_data/{args.dataset}/att_anomalies.pt")
     with open(f"perturbed_data/{args.dataset}/anomalies.txt", "w") as f:
-        f.write(f"Structural anomalies ({args.percent_structural}%): {struct_anomalies.shape}\n")
-        f.write(f"Attribute anomalies ({args.percent_attribute}%): {att_anomalies.shape}\n")
+        f.write(f"Structural anomalies ({args.percent_structural * 100}%): {struct_anomalies.shape[0]}\n")
+        f.write(f"\tClique size: {args.clique_size}\n")
+        f.write(f"\tNumber of cliques: {struct_anomalies.shape[0] // args.clique_size}\n")
+        f.write(f"Attribute anomalies ({args.percent_attribute * 100}%): {att_anomalies.shape[0]}\n")
         f.write(f"Total anomalies: {struct_anomalies.shape[0] + att_anomalies.shape[0]}\n")
     print(f"Anomalies saved to perturbed_data/{args.dataset}/anomalies.txt")
 
