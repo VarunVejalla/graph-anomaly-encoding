@@ -122,8 +122,8 @@ def main():
 
     parser = argparse.ArgumentParser(description="Anomaly Injection")
     parser.add_argument("--dataset", type=str, default="Cora", help="Dataset name")
-    parser.add_argument("--percent_structural", type=float, default=0.025, help="Percentage of structural anomalies to inject")
-    parser.add_argument("--percent_attribute", type=float, default=0.025, help="Percentage of attribute anomalies to inject")
+    parser.add_argument("--percent_structural", type=float, default=2.5, help="Percentage of structural anomalies to inject")
+    parser.add_argument("--percent_attribute", type=float, default=2.5, help="Percentage of attribute anomalies to inject")
     parser.add_argument("--clique_size", type=int, default=5, help="Size of the cliques to create")
     
     args = parser.parse_args()
@@ -133,16 +133,16 @@ def main():
     data = dataset[0]
     data = data.to(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
     # Create the anomalies
-    new_graph, struct_anomalies, att_anomalies = inject_anomalies(data, args.percent_structural, args.percent_attribute, args.clique_size)
+    new_graph, struct_anomalies, att_anomalies = inject_anomalies(data, args.percent_structural / 100, args.percent_attribute / 100, args.clique_size)
     # Save the anomalies
     torch.save(new_graph, f"perturbed_data/{args.dataset}/perturbed_data.pt")
     torch.save(struct_anomalies, f"perturbed_data/{args.dataset}/struct_anomalies.pt")
     torch.save(att_anomalies, f"perturbed_data/{args.dataset}/att_anomalies.pt")
     with open(f"perturbed_data/{args.dataset}/anomalies.txt", "w") as f:
-        f.write(f"Structural anomalies ({args.percent_structural * 100}%): {struct_anomalies.shape[0]}\n")
+        f.write(f"Structural anomalies ({args.percent_structural}%): {struct_anomalies.shape[0]}\n")
         f.write(f"\tClique size: {args.clique_size}\n")
         f.write(f"\tNumber of cliques: {struct_anomalies.shape[0] // args.clique_size}\n")
-        f.write(f"Attribute anomalies ({args.percent_attribute * 100}%): {att_anomalies.shape[0]}\n")
+        f.write(f"Attribute anomalies ({args.percent_attribute}%): {att_anomalies.shape[0]}\n")
         f.write(f"Total anomalies: {struct_anomalies.shape[0] + att_anomalies.shape[0]}\n")
     print(f"Anomalies saved to perturbed_data/{args.dataset}/anomalies.txt")
 
