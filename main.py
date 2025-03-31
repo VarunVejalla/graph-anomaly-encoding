@@ -72,8 +72,10 @@ def run_VGAE():
     pred_one_hot_repr[anomalous] = 1
 
     # print the classification report
-    print(classification_report(struct_true_one_hot_repr, pred_one_hot_repr, target_names=["Normal", "Structural Anomalous"]))
-    print(classification_report(att_true_one_hot_repr, pred_one_hot_repr, target_names=["Normal", "Attribute Anomalous"]))
+    print()
+    print(f"Percent of structural anomalies identified: {torch.sum(pred_one_hot_repr[struct_anomalies])/struct_anomalies.shape[0] * 100}% ({torch.sum(pred_one_hot_repr[struct_anomalies])} / {struct_anomalies.shape[0]})")
+    print(f"Percent of attribute anomalies identified: {torch.sum(pred_one_hot_repr[att_anomalies])/att_anomalies.shape[0] * 100}% ({torch.sum(pred_one_hot_repr[att_anomalies])} / {att_anomalies.shape[0]})")
+
     print(classification_report(true_one_hot_repr, pred_one_hot_repr, target_names=["Normal", "Anomalous"]))
     # This is honestly pretty on par with the results from the paper
     # This usually gets an f1-score of about ~0.2 which is pretty good for a simple model
