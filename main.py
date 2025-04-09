@@ -46,7 +46,7 @@ def run_VGAE():
             print("Epoch {} - Loss: {} ROC_AUC: {} Precision: {}".format(epoch, loss.cpu().item(), roc_auc, ap))
             
     # Load anomalous graph
-    data = torch.load(f"perturbed_data/{args.dataset}/perturbed_data.pt", weights_only=False).to(device)
+    data = torch.load(f"perturbed_data/{args.dataset}/perturbed_data.pt", weights_only=False, map_location=torch.device(device)).to(device)
     # data = torch.load("../../pubmed_anomalous_graph.pt", weights_only=False).to(device)
     # Get the adjacency matrix of the anomalous graph
     orignal_adjacency = torch.squeeze(torch_geometric.utils.to_dense_adj(data.edge_index))
@@ -56,8 +56,8 @@ def run_VGAE():
     anomalous = torch.argsort(torch.sum(torch.abs(pred_adjacency - orignal_adjacency), dim=1), descending=True)[:args.num_anomalous_nodes]
     # Load the ground truth anomalous nodes
     # anomalous_nodes = torch.load("../../cora_anomalous_nodes.pt", weights_only=False)
-    att_anomalies = torch.load(f"perturbed_data/{args.dataset}/att_anomalies.pt", weights_only=False).to(device)
-    struct_anomalies = torch.load(f"perturbed_data/{args.dataset}/struct_anomalies.pt", weights_only=False).to(device)
+    att_anomalies = torch.load(f"perturbed_data/{args.dataset}/att_anomalies.pt", weights_only=False, map_location=torch.device(device)).to(device)
+    struct_anomalies = torch.load(f"perturbed_data/{args.dataset}/struct_anomalies.pt", weights_only=False, map_location=torch.device(device)).to(device)
 
     att_true_one_hot_repr = torch.zeros(data.x.size(0))
     att_true_one_hot_repr[att_anomalies] = 1
@@ -72,11 +72,23 @@ def run_VGAE():
     pred_one_hot_repr[anomalous] = 1
 
     # print the classification report
-    print()
-    print(f"Percent of structural anomalies identified: {torch.sum(pred_one_hot_repr[struct_anomalies])/struct_anomalies.shape[0] * 100}% ({torch.sum(pred_one_hot_repr[struct_anomalies])} / {struct_anomalies.shape[0]})")
-    print(f"Percent of attribute anomalies identified: {torch.sum(pred_one_hot_repr[att_anomalies])/att_anomalies.shape[0] * 100}% ({torch.sum(pred_one_hot_repr[att_anomalies])} / {att_anomalies.shape[0]})")
+    true_anomalies = set(all_anomalies.tolist())
+    print("PRECISION/RECALL AT K\nK\tPRECISION\tRECALL")
+    for k in range(50, args.num_anomalous_nodes + 1, 50):
+        preds = anomalous[:k].tolist()
+        preds = set(preds)
+        # Get the intersection of the two sets
+        intersection = preds.intersection(true_anomalies)
+        precision = len(intersection) / k
+        
+        recall = len(intersection) / len(true_anomalies)
+        # print the precision and recall
+        print(f"{k}\t{precision:.4f}\t{recall:.4f}")
 
-    print(classification_report(true_one_hot_repr, pred_one_hot_repr, target_names=["Normal", "Anomalous"]))
+    print()
+    print(f"Percent of structural anomalies identified: {torch.sum(pred_one_hot_repr[struct_anomalies])/struct_anomalies.shape[0] * 100:.4f}% ({torch.sum(pred_one_hot_repr[struct_anomalies])} / {struct_anomalies.shape[0]})")
+    print(f"Percent of attribute anomalies identified: {torch.sum(pred_one_hot_repr[att_anomalies])/att_anomalies.shape[0] * 100:.4f}% ({torch.sum(pred_one_hot_repr[att_anomalies])} / {att_anomalies.shape[0]})")
+
     # This is honestly pretty on par with the results from the paper
     # This usually gets an f1-score of about ~0.2 which is pretty good for a simple model
     # The paper's model gets an f1-score of about ~0.4

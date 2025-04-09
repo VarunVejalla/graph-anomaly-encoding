@@ -3,7 +3,9 @@ import torch
 import torch_geometric.data as tgdata
 import torch_geometric.utils as tgutils
 
-def structurally_perturb(graph: tgdata.Data, anomalous_nodes: torch.Tensor, clique_size: int) -> tuple[tgdata.Data, torch.Tensor]:
+def structurally_perturb(graph: tgdata.Data, 
+                         anomalous_nodes: torch.Tensor, 
+                         clique_size: int) -> tuple[tgdata.Data, torch.Tensor]:
     """
     Creates cliques of anomalous nodes in the graph.
 
@@ -40,7 +42,9 @@ def structurally_perturb(graph: tgdata.Data, anomalous_nodes: torch.Tensor, cliq
     new_graph.edge_index, new_graph.edge_attr = tgutils.coalesce(new_graph.edge_index, new_graph.edge_attr, graph.num_nodes)
     return new_graph, anomalous_nodes
 
-def attribute_perturb(graph: tgdata.Data, anomalous_nodes: torch.Tensor, k_nodes: int) -> tuple[tgdata.Data, torch.Tensor]:
+def attribute_perturb(graph: tgdata.Data, 
+                      anomalous_nodes: torch.Tensor, 
+                      k_nodes: int) -> tuple[tgdata.Data, torch.Tensor]:
     """
     Replaces the features of the anomalous nodes with the features of the farthest node in a set of k samples.
 
