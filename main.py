@@ -10,7 +10,6 @@ from torch_geometric.utils import train_test_split_edges
 
 from models.VGAE.model import DeepVGAE
 from models.VGAE.config.config import parse_args
-from sklearn.metrics import classification_report
 
 def run_VGAE():
     """
@@ -59,16 +58,16 @@ def run_VGAE():
     att_anomalies = torch.load(f"perturbed_data/{args.dataset}/att_anomalies.pt", weights_only=False, map_location=torch.device(device)).to(device)
     struct_anomalies = torch.load(f"perturbed_data/{args.dataset}/struct_anomalies.pt", weights_only=False, map_location=torch.device(device)).to(device)
 
-    att_true_one_hot_repr = torch.zeros(data.x.size(0))
+    att_true_one_hot_repr = torch.zeros(data.x.size(0)).to(device)
     att_true_one_hot_repr[att_anomalies] = 1
-    struct_true_one_hot_repr = torch.zeros(data.x.size(0))
+    struct_true_one_hot_repr = torch.zeros(data.x.size(0)).to(device)
     struct_true_one_hot_repr[struct_anomalies] = 1
 
     all_anomalies = torch.cat((att_anomalies, struct_anomalies), dim=0).unique()
-    true_one_hot_repr = torch.zeros(data.x.size(0))
+    true_one_hot_repr = torch.zeros(data.x.size(0)).to(device)
     true_one_hot_repr[all_anomalies] = 1
 
-    pred_one_hot_repr = torch.zeros(data.x.size(0))
+    pred_one_hot_repr = torch.zeros(data.x.size(0)).to(device)
     pred_one_hot_repr[anomalous] = 1
 
     # print the classification report
@@ -89,10 +88,7 @@ def run_VGAE():
     print(f"Percent of structural anomalies identified: {torch.sum(pred_one_hot_repr[struct_anomalies])/struct_anomalies.shape[0] * 100:.4f}% ({torch.sum(pred_one_hot_repr[struct_anomalies])} / {struct_anomalies.shape[0]})")
     print(f"Percent of attribute anomalies identified: {torch.sum(pred_one_hot_repr[att_anomalies])/att_anomalies.shape[0] * 100:.4f}% ({torch.sum(pred_one_hot_repr[att_anomalies])} / {att_anomalies.shape[0]})")
 
-    # This is honestly pretty on par with the results from the paper
-    # This usually gets an f1-score of about ~0.2 which is pretty good for a simple model
-    # The paper's model gets an f1-score of about ~0.4
-    # This paper:
+    
     # https://epubs.siam.org/doi/pdf/10.1137/1.9781611975673.67
 
 if __name__ == "__main__":
