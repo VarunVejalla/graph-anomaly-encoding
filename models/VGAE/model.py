@@ -10,15 +10,33 @@ from torch_geometric.utils import negative_sampling, remove_self_loops, add_self
 class GCNEncoder(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
         super(GCNEncoder, self).__init__()
-        self.gcn_shared = GCNConv(in_channels, hidden_channels)
-        self.gcn_mu = GCNConv(hidden_channels, out_channels)
-        self.gcn_logvar = GCNConv(hidden_channels, out_channels)
+        layers = []
+        last_channel = in_channels
+        for hidden_dim in hidden_channels:
+            layers.append(GCNConv(last_channel, hidden_dim))
+            last_channel = hidden_dim
+        self.gcn_layers = nn.ModuleList(layers)
+        
+        self.gcn_mu = GCNConv(last_channel, out_channels)
+        self.gcn_logvar = GCNConv(last_channel, out_channels)
+        
+        # self.gcn_shared = GCNConv(in_channels, hidden_channels)
+        # self.gcn_mu = GCNConv(hidden_channels, out_channels)
+        # self.gcn_logvar = GCNConv(hidden_channels, out_channels)
 
     def forward(self, x, edge_index):
-        x = F.relu(self.gcn_shared(x, edge_index))
+        for gcn in self.gcn_layers:
+            x = F.relu(gcn(x, edge_index))
+
         mu = self.gcn_mu(x, edge_index)
         logvar = self.gcn_logvar(x, edge_index)
         return mu, logvar
+
+    # def forward(self, x, edge_index):
+    #     x = F.relu(self.gcn_shared(x, edge_index))
+    #     mu = self.gcn_mu(x, edge_index)
+    #     logvar = self.gcn_logvar(x, edge_index)
+    #     return mu, logvar
 
 
 class DeepVGAE(VGAE):
