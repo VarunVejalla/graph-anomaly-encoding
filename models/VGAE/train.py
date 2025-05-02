@@ -24,7 +24,7 @@ def get_trained_model(args):
     model = DeepVGAE(args).to(device)
     optimizer = Adam(model.parameters(), lr=args.lr)
 
-    data = torch.load(f"perturbed_data/{args.dataset}/perturbed_data.pt", weights_only=False).to(device)
+    data = torch.load(f"perturbed_data/{args.dataset}/trial_{args.trial_num}/perturbed_data.pt", weights_only=False).to(device)
 
     all_edge_index = data.edge_index
 
@@ -90,9 +90,9 @@ rankings = {"reconstruction":{},
 
 for embedding_dim in list(range(10,401,10)):
     print(embedding_dim)
+    args.enc_hidden_channels = []
     args.enc_out_channels = embedding_dim
-    
-    model_path = f"{args.dataset}-{embedding_dim}.pt"
+    model_path = f"models_tmp/{args.dataset}/trial_{args.trial_num}/{args.dataset}-{embedding_dim}-trial_{args.trial_num}.pt"
     
     if os.path.exists(model_path):
         model = DeepVGAE(args).to(device) # loads everything except the weights
@@ -104,7 +104,7 @@ for embedding_dim in list(range(10,401,10)):
     
     # print(model)
     
-    data = torch.load(f"perturbed_data/{args.dataset}/perturbed_data.pt", weights_only=False).to(device)
+    data = torch.load(f"perturbed_data/{args.dataset}/trial_{args.trial_num}/perturbed_data.pt", weights_only=False).to(device)
     
     rankings["reconstruction"][embedding_dim] = get_ranking_reconstruction(data, model)
     rankings["mean_diff"][embedding_dim] = get_ranking_encoded_mean_diff(data, model)

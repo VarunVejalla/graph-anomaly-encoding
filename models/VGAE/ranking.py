@@ -15,13 +15,14 @@ import matplotlib.pyplot as plt
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 args = parse_args()
+data_path = f"perturbed_data/{args.dataset}/trial_{args.trial_num}"
 
-data = torch.load(f"perturbed_data/{args.dataset}/perturbed_data.pt", weights_only=False).to(device)
+data = torch.load(f"{data_path}/perturbed_data.pt", weights_only=False).to(device)
 
-att_anomalies = torch.load(f"perturbed_data/{args.dataset}/att_anomalies.pt", weights_only=False).to(device)
-struct_anomalies = torch.load(f"perturbed_data/{args.dataset}/struct_anomalies.pt", weights_only=False).to(device)
+att_anomalies = torch.load(f"{data_path}/att_anomalies.pt", weights_only=False).to(device)
+struct_anomalies = torch.load(f"{data_path}/struct_anomalies.pt", weights_only=False).to(device)
 
-all_anomalies = torch.cat((att_anomalies,), dim=0).unique()
+all_anomalies = torch.cat((att_anomalies, struct_anomalies), dim=0).unique()
 true_one_hot_repr = torch.zeros(data.x.size(0))
 true_one_hot_repr[all_anomalies] = 1
 

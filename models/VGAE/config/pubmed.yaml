@@ -1,5 +1,5 @@
 dataset: "PubMed"
-
+trial_num: 3
 enc_in_channels: 500
 enc_hidden_channels: []
 enc_out_channels: 16

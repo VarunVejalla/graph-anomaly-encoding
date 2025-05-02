@@ -1,5 +1,0 @@
-Structural anomalies (5.0%): 132
-	Clique size: 6
-	Number of cliques: 22
-Attribute anomalies (5.0%): 138
-Total anomalies: 270

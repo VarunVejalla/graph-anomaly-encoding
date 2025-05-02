@@ -1,5 +1,5 @@
 dataset: "CiteSeer"
-
+trial_num: 3
 enc_in_channels: 3703
 enc_hidden_channels: []
 enc_out_channels: 80

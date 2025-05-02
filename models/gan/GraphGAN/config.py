@@ -8,7 +8,7 @@ lambda_dis = 1e-5  # l2 loss regulation weight for the discriminator
 n_sample_gen = 20  # number of samples for the generator
 lr_gen = 1e-3  # learning rate for the generator
 lr_dis = 1e-3  # learning rate for the discriminator
-n_epochs = 1  # number of outer loops
+n_epochs = 10  # number of outer loops
 n_epochs_gen = 30  # number of inner loops for the generator
 n_epochs_dis = 30  # number of inner loops for the discriminator
 gen_interval = n_epochs_gen  # sample new nodes for the generator for every gen_interval iterations
@@ -20,13 +20,28 @@ load_model = False  # whether loading existing model for initialization
 save_steps = 10
 
 # other hyper-parameters
-n_emb = 50
+n_emb = 1433 # Cora
+# n_emb = 3703 # CiteSeer
+# n_emb = 500 # PubMed
 multi_processing = True  # whether using multi-processing to construct BFS-trees
 window_size = 2
 
 # application and dataset settings
 app = "link_prediction"
-dataset = "cora"
+# Cora
+dataset = "Cora/Cora_trial_1" 
+# dataset = "Cora/Cora_trial_2"
+# dataset = "Cora/Cora_trial_3"
+
+# CiteSeer
+# dataset = "CiteSeer/CiteSeer_trial_1"
+# dataset = "CiteSeer/CiteSeer_trial_2"
+# dataset = "CiteSeer/CiteSeer_trial_3"
+
+#PubMed
+# dataset = "PubMed/PubMed_trial_1"
+# dataset = "PubMed/PubMed_trial_2"
+# dataset = "PubMed/PubMed_trial_3"
 
 # path settings
 train_filename = "GAN/data/" + app + "/" + dataset + "_train.txt"
