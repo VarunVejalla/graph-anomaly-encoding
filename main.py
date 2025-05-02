@@ -91,5 +91,7 @@ def run_VGAE():
     
     # https://epubs.siam.org/doi/pdf/10.1137/1.9781611975673.67
 
+    
+
 if __name__ == "__main__":
-    run_VGAE()
+    # run_VGAE()

@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 GAN
 models_tmp
+gan_outputs/**/*.npy
