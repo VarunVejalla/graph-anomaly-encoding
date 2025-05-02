@@ -20,7 +20,7 @@ def convert_pygraph_to_gan_format(data: tgdata.Data,
     Convert a PyTorch Geometric graph to a format suitable for GAN training.
     """
     
-    dataset_folder = f"link_prediction/Cora"
+    dataset_folder = f"link_prediction/{data_name}"
     os.makedirs(GAN_DATA_PATH + "/data/" + dataset_folder, exist_ok=True)
     os.makedirs(GAN_DATA_PATH + "/pre_train/" + dataset_folder, exist_ok=True)
     os.makedirs(GAN_DATA_PATH + "/results/" + dataset_folder, exist_ok=True)

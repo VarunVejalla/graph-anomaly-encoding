@@ -18,8 +18,16 @@ class GraphGAN(object):
     def __init__(self):
         print("reading graphs...")
         self.n_node, self.graph = utils.read_edges(config.train_filename, config.test_filename)
+        
+        # COMMENT EVERYTHING UNTIL "TILL HERE" for Cora
+        self.n_node = 3327 # CiteSeer
+        # self.n_node = 19717 # PubMed
+        for i in range(self.n_node):
+            if i not in self.graph:
+                self.graph[i] = []
+        # TILL HERE
+        
         self.root_nodes = [i for i in range(self.n_node)]
-
         print("reading initial embeddings...")
         self.node_embed_init_d = utils.read_embeddings(filename=config.pretrain_emb_filename_d,
                                                        n_node=self.n_node,

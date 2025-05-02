@@ -20,8 +20,8 @@ load_model = False  # whether loading existing model for initialization
 save_steps = 10
 
 # other hyper-parameters
-n_emb = 1433 # Cora
-# n_emb = 3703 # CiteSeer
+# n_emb = 1433 # Cora
+n_emb = 3703 # CiteSeer
 # n_emb = 500 # PubMed
 multi_processing = True  # whether using multi-processing to construct BFS-trees
 window_size = 2
@@ -29,12 +29,12 @@ window_size = 2
 # application and dataset settings
 app = "link_prediction"
 # Cora
-dataset = "Cora/Cora_trial_1" 
+# dataset = "Cora/Cora_trial_1" 
 # dataset = "Cora/Cora_trial_2"
 # dataset = "Cora/Cora_trial_3"
 
 # CiteSeer
-# dataset = "CiteSeer/CiteSeer_trial_1"
+dataset = "CiteSeer/CiteSeer_trial_1"
 # dataset = "CiteSeer/CiteSeer_trial_2"
 # dataset = "CiteSeer/CiteSeer_trial_3"
 
