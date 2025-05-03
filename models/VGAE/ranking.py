@@ -14,23 +14,10 @@ import matplotlib.pyplot as plt
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-args = parse_args()
-data_path = f"perturbed_data/{args.dataset}/trial_{args.trial_num}"
-
-data = torch.load(f"{data_path}/perturbed_data.pt", weights_only=False).to(device)
-
-att_anomalies = torch.load(f"{data_path}/att_anomalies.pt", weights_only=False).to(device)
-struct_anomalies = torch.load(f"{data_path}/struct_anomalies.pt", weights_only=False).to(device)
-
-all_anomalies = torch.cat((att_anomalies, struct_anomalies), dim=0).unique()
-true_one_hot_repr = torch.zeros(data.x.size(0))
-true_one_hot_repr[all_anomalies] = 1
-
-print(max(set(all_anomalies)), data.x.size(0))
-
-def get_score(anomaly_ranking):
+def get_score(anomaly_ranking, true_one_hot_repr):
     # print(len(anomaly_ranking))
-    remapping = [true_one_hot_repr[anomaly_ranking[i]] for i in range(data.x.size(0))]
+    size = len(anomaly_ranking)
+    remapping = [true_one_hot_repr[anomaly_ranking[i]] for i in range(size)]
 
     inversions = 0
     ones_seen = 0
@@ -41,52 +28,110 @@ def get_score(anomaly_ranking):
         else:
             inversions += ones_seen
 
-    return inversions/(ones_seen*(data.x.size(0)-ones_seen))
+    return inversions/(ones_seen*(size-ones_seen))
 
-# def evaluate(actual_anomalies, anomaly_ranking, num_anomalies):
-#     # return precision, recall, F1, and inversion score
+def make_plot(anomaly_type = "all", ds = "all", tn = -1):
+    anomaly_type = anomaly_type.lower()
+    ds = ds.lower()
+    assert anomaly_type in ["all", "attribute", "structural"]
+    assert ds in ["all", "citeseer", "cora", "pubmed"]
+    assert tn in [-1, 1, 2, 3]
+    
+    if ds == "all":
+        datasets = ["citeseer", "cora", "pubmed"]
+    else:
+        datasets = [ds]
+    if tn == -1:
+        trial_nums = [1,2,3]
+    else:
+        trial_nums = [tn]
+    
+    plt.xlim(0, 400)
+    plt.ylim(0, 1)
+    plt.xlabel('Embedding Dimension')
+    plt.ylabel('Inversion Score')
+    
+    total_scores = {}
+    
+    for dataset in datasets:
+        for trial_num in trial_nums:
+            print(dataset, trial_num)
+            data_path = f"perturbed_data/{dataset}/trial_{trial_num}"
 
-# anomalous = sorted_loss[-332:]
+            data = torch.load(f"{data_path}/perturbed_data.pt", weights_only=False, map_location=torch.device('cpu')).to(device)
 
-with open(f"{args.dataset}_ranking_temp_file.pkl", "rb") as file:
-    rankings = pickle.load(file)
+            
+            att_anomalies = torch.load(f"{data_path}/att_anomalies.pt", weights_only=False, map_location=torch.device('cpu')).to(device)
+            struct_anomalies = torch.load(f"{data_path}/struct_anomalies.pt", weights_only=False, map_location=torch.device('cpu')).to(device)
+            
+            if anomaly_type.lower() == "all":
+                all_anomalies = torch.cat((att_anomalies, struct_anomalies), dim=0).unique()
+            elif anomaly_type.lower() == "attribute":
+                all_anomalies = torch.cat((att_anomalies, ), dim=0).unique()
+            elif anomaly_type.lower() == "structural":
+                all_anomalies = torch.cat((struct_anomalies, ), dim=0).unique()
+            
 
-num_anomalies = len(all_anomalies)
+            
+            true_one_hot_repr = torch.zeros(data.x.size(0))
+            true_one_hot_repr[all_anomalies] = 1
 
-print(rankings.keys())
+            print(max(set(all_anomalies)), data.x.size(0))
 
-# pred_one_hot_repr = torch.zeros(data.x.size(0))
+            # def evaluate(actual_anomalies, anomaly_ranking, num_anomalies):
+            #     # return precision, recall, F1, and inversion score
 
-# anomaly_set = set(all_anomalies)
+            # anomalous = sorted_loss[-332:]
 
-scores = {key:[[], []] for key in rankings.keys()}
+            with open(f"vgae_outputs/{dataset}_ranking_trial_{trial_num}.pkl", "rb") as file:
+                rankings = pickle.load(file)
 
-for metric, ranking_dict in rankings.items():
-    for embedding_dim, ranking in ranking_dict.items():
-        # print(len(ranking))
-        scores[metric][0].append(embedding_dim)
-        if metric in ["gradient_entropy", "gradient_loss"]:
-            scores[metric][1].append(get_score(ranking.flip(0)))
-        else:
-            scores[metric][1].append(get_score(ranking))
+            num_anomalies = len(all_anomalies)
 
-for metric, (embedding_dims, metric_scores) in scores.items():
-    plt.plot(embedding_dims, metric_scores, label=metric)
+            print(rankings.keys())
 
-plt.xlim(0, 400)
-plt.ylim(0, 1)
-plt.xlabel('Embedding Dimension')
-plt.ylabel('Inversion Score')
-plt.title(f'{args.dataset} - attribute anomalies')
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
+            # pred_one_hot_repr = torch.zeros(data.x.size(0))
 
-plt.savefig(f"images/{args.dataset}_attribute.png")
+            # anomaly_set = set(all_anomalies)
 
+            # scores = {key:[[], []] for key in rankings.keys()}
 
+            for metric, ranking_dict in rankings.items():
+                if metric not in total_scores:
+                    total_scores[metric] = {}
+                for embedding_dim, ranking in ranking_dict.items():
+                    if embedding_dim not in total_scores[metric]:
+                        total_scores[metric][embedding_dim] = [0, 0]
+                    
+                    if metric in ["gradient_entropy", "gradient_loss"]:
+                        curr_score = get_score(ranking.flip(0), true_one_hot_repr)
+                    else:
+                        curr_score = get_score(ranking, true_one_hot_repr)
+                    
+                    total_scores[metric][embedding_dim][0] += curr_score
+                    total_scores[metric][embedding_dim][1] += 1
+    
+    avg_scores = {metric: [[], []] for metric in total_scores.keys()}
+    for metric in total_scores:
+        for embedding_dim in total_scores[metric]:
+            avg_scores[metric][0].append(embedding_dim)
+            lu = total_scores[metric][embedding_dim]
+            avg_scores[metric][1].append(lu[0]/lu[1])
 
-# att_true_one_hot_repr = torch.zeros(data.x.size(0))
-# att_true_one_hot_repr[att_anomalies] = 1
-# struct_true_one_hot_repr = torch.zeros(data.x.size(0))
-# struct_true_one_hot_repr[struct_anomalies] = 1
+    for metric, (embedding_dims, metric_scores) in avg_scores.items():
+        plt.plot(embedding_dims, metric_scores, label=metric)
+    
+    if tn == -1:
+        plt.title(f'{dataset} - {anomaly_type} anomalies, all trials')
+    else:
+        plt.title(f'{dataset} - {anomaly_type} anomalies, trial {tn}')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    plt.savefig(f"images/{ds}_{tn}_{anomaly_type}.png")
+
+for anomaly_type in ["all", "attribute", "structural"]:
+    for ds in ["all", "citeseer", "cora", "pubmed"]:
+        for tn in [-1]:
+            make_plot(anomaly_type, ds, tn)
