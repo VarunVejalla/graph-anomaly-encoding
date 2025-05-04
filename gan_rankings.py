@@ -84,7 +84,63 @@ def get_gan_rankings(dataset_name, trial_num):
 
     gen_mean_diff_score = mean_diff_score(gen_emb)
     dis_mean_diff_score = mean_diff_score(dis_emb)
+
+
+    def get_score(anomaly_ranking, anomalies):
+        true_one_hot_repr = torch.zeros(nodes)
+        true_one_hot_repr[anomalies] = 1
+        true_one_hot_repr = true_one_hot_repr.cpu().numpy()
+        remapping = [true_one_hot_repr[anomaly_ranking[i]] for i in range(anomalous_graph.x.size(0))]
+
+        inversions = 0
+        ones_seen = 0
+
+        for label in remapping:
+            if label == 1:
+                ones_seen += 1
+            else:
+                inversions += ones_seen
+
+        return inversions/(ones_seen*(anomalous_graph.x.size(0)-ones_seen))
     
+    generator = {"Reconstruction All": [get_score(gen_reconstruction_score, all_anomalous_nodes)],
+                 "Reconstruction Structural": [get_score(gen_reconstruction_score, struct_anomalous_nodes)],
+                 "Reconstruction Attribute": [get_score(gen_reconstruction_score, att_anomalous_nodes)],
+                 "Mean Diff All": [get_score(gen_mean_diff_score, all_anomalous_nodes)],
+                 "Mean Diff Structural": [get_score(gen_mean_diff_score, struct_anomalous_nodes)],
+                 "Mean Diff Attribute": [get_score(gen_mean_diff_score, att_anomalous_nodes)],
+                 "Mean Diff All Reverse": [get_score(gen_mean_diff_score[::-1], all_anomalous_nodes)],
+                 "Mean Diff Structural Reverse":[ get_score(gen_mean_diff_score[::-1], struct_anomalous_nodes)],
+                 "Mean Diff Attribute Reverse":[ get_score(gen_mean_diff_score[::-1], att_anomalous_nodes)]}
+    
+    discriminator = {"Reconstruction All": [get_score(dis_reconstruction_score, all_anomalous_nodes)],
+                    "Reconstruction Structural": [get_score(dis_reconstruction_score, struct_anomalous_nodes)],
+                    "Reconstruction Attribute": [get_score(dis_reconstruction_score, att_anomalous_nodes)],
+                    "Mean Diff All": [get_score(dis_mean_diff_score, all_anomalous_nodes)],
+                    "Mean Diff Structural": [get_score(dis_mean_diff_score, struct_anomalous_nodes)],
+                    "Mean Diff Attribute": [get_score(dis_mean_diff_score, att_anomalous_nodes)],
+                    "Mean Diff All Reverse": [get_score(dis_mean_diff_score[::-1], all_anomalous_nodes)],
+                    "Mean Diff Structural Reverse": [get_score(dis_mean_diff_score[::-1], struct_anomalous_nodes)],
+                    "Mean Diff Attribute Reverse": [get_score(dis_mean_diff_score[::-1], att_anomalous_nodes)]}
+    
+    discriminator_df = pd.DataFrame(discriminator).T
+    generator_df = pd.DataFrame(generator).T
+    generator_df.columns = ["Score"]
+    discriminator_df.columns = ["Score"]
+    generator_df.index = ["Reconstruction Score All", "Reconstruction Score Structural", "Reconstruction Score Attribute",
+                            "Mean Diff Score All", "Mean Diff Score Structural", "Mean Diff Score Attribute",
+                            "Mean Diff Score All Reverse", "Mean Diff Score Structural Reverse", "Mean Diff Score Attribute Reverse"]
+    discriminator_df.index = ["Reconstruction Score All", "Reconstruction Score Structural", "Reconstruction Score Attribute",
+                            "Mean Diff Score All", "Mean Diff Score Structural", "Mean Diff Score Attribute",
+                            "Mean Diff Score All Reverse", "Mean Diff Score Structural Reverse", "Mean Diff Score Attribute Reverse"]
+    joined = pd.concat([generator_df, discriminator_df], axis=1)
+    joined.columns = ["Generator Score", "Discriminator Score"]
+    joined.to_csv(f"gan_outputs/{dataset_name}/trial_{trial_num}_inversion_scores.csv", index=True)
+    print(discriminator_df)
+    print()
+    print(generator_df)
+    exit()
+
     precision = {"K": [],
                 "Generator Reconstruction Score All": [], "Discriminator Reconstruction Score All": [],
                 "Generator Mean Diff Score All": [], "Discriminator Mean Diff Score All": [],
@@ -139,53 +195,21 @@ def get_gan_rankings(dataset_name, trial_num):
     precision_df.to_csv(f"gan_outputs/{dataset_name}/trial_{trial_num}_gan_precision.csv", index=False)
     recall_df.to_csv(f"gan_outputs/{dataset_name}/trial_{trial_num}_gan_recall.csv", index=False)
 
-def vgae_rankings(dataset_name, trial_num):
-    import numpy as np
-    import torch
+
+def avg_csv_files(dataset_name):
     import pandas as pd
     import os
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    os.makedirs(f"vgae_outputs/{dataset_name}", exist_ok=True)
-
-    data = np.load(f"models_tmp/{dataset_name}/{dataset_name}_ranking_temp_file_trial_2.pkl", allow_pickle=True)
-    reconstruction_ranking = data['reconstruction'][170].cpu().numpy()
-    mean_diff_ranking = data['mean_diff'][170].cpu().numpy()
-    att_anomalous_nodes = torch.load(f"perturbed_data/{dataset_name}/trial_{trial_num}/att_anomalies.pt", weights_only=False, map_location=device).cpu().numpy()
-    struct_anomalous_nodes = torch.load(f"perturbed_data/{dataset_name}/trial_{trial_num}/struct_anomalies.pt", weights_only=False, map_location=device).cpu().numpy()
-    all_anomalous_nodes = np.concatenate((att_anomalous_nodes, struct_anomalous_nodes), axis=0)
-    all_anomalous_nodes = np.unique(all_anomalous_nodes)
-    precision = {"K": [],
-                "Reconstruction Score All": [], "Mean Diff Score All": [],
-                "Reconstruction Score Structural": [], "Mean Diff Score Structural": [],
-                "Reconstruction Score Attribute": [], "Mean Diff Score Attribute": []}
-    
-    recall = {"K": [],
-                "Reconstruction Score All": [], "Mean Diff Score All": [],
-                    "Reconstruction Score Structural": [], "Mean Diff Score Structural": [],
-                    "Reconstruction Score Attribute": [], "Mean Diff Score Attribute": []}
-    
-    for i in range(25, len(all_anomalous_nodes) + 1, 25):
-        precision["K"].append(i)
-        recall["K"].append(i)
-        precision["Reconstruction Score All"].append(len(set(reconstruction_ranking[:i]) & set(all_anomalous_nodes)) / i)
-        recall["Reconstruction Score All"].append(len(set(reconstruction_ranking[:i]) & set(all_anomalous_nodes)) / len(all_anomalous_nodes))
-        precision["Mean Diff Score All"].append(len(set(mean_diff_ranking[:i]) & set(all_anomalous_nodes)) / i)
-        recall["Mean Diff Score All"].append(len(set(mean_diff_ranking[:i]) & set(all_anomalous_nodes)) / len(all_anomalous_nodes))
-
-        precision["Reconstruction Score Structural"].append(len(set(reconstruction_ranking[:i]) & set(struct_anomalous_nodes)) / i)
-        recall["Reconstruction Score Structural"].append(len(set(reconstruction_ranking[:i]) & set(struct_anomalous_nodes)) / len(struct_anomalous_nodes))
-        precision["Mean Diff Score Structural"].append(len(set(mean_diff_ranking[:i]) & set(struct_anomalous_nodes)) / i)
-        recall["Mean Diff Score Structural"].append(len(set(mean_diff_ranking[:i]) & set(struct_anomalous_nodes)) / len(struct_anomalous_nodes))
-
-        precision["Reconstruction Score Attribute"].append(len(set(reconstruction_ranking[:i]) & set(att_anomalous_nodes)) / i)
-        recall["Reconstruction Score Attribute"].append(len(set(reconstruction_ranking[:i]) & set(att_anomalous_nodes)) / len(att_anomalous_nodes))
-        precision["Mean Diff Score Attribute"].append(len(set(mean_diff_ranking[:i]) & set(att_anomalous_nodes)) / i)
-        recall["Mean Diff Score Attribute"].append(len(set(mean_diff_ranking[:i]) & set(att_anomalous_nodes)) / len(att_anomalous_nodes))
-    precision_df = pd.DataFrame(precision)
-    recall_df = pd.DataFrame(recall)
-    precision_df.to_csv(f"vgae_outputs/{dataset_name}/trial_{trial_num}_vgae_precision.csv", index=False)
-    recall_df.to_csv(f"vgae_outputs/{dataset_name}/trial_{trial_num}_vgae_recall.csv", index=False)
+    print(pd.read_csv(f"gan_outputs/{dataset_name}/trial_{1}_inversion_scores.csv", index_col=0).to_latex())
+    exit()
+    joined = None
+    for i in range(1,4):
+        if joined is None:
+            joined = pd.read_csv(f"gan_outputs/{dataset_name}/trial_{i}_inversion_scores.csv", index_col=0)
+        else:
+            temp = pd.read_csv(f"gan_outputs/{dataset_name}/trial_{i}_inversion_scores.csv", index_col=0)
+            joined = pd.concat([joined, temp], axis=0)
+    print(joined.groupby(joined.index).mean().to_latex())
+    joined.to_csv(f"gan_outputs/{dataset_name}/avg_inversion_scores.csv", index=True)
 
 
 if __name__ == "__main__":
@@ -197,6 +221,5 @@ if __name__ == "__main__":
 
     # gen_adj_mat, dis_adj_mat = get_gan_pred_adj_matrix(args.dataset, args.trial_num)
 
-    # get_gan_rankings(args.dataset, args.trial_num)
-
-    vgae_rankings(args.dataset, args.trial_num)
+    #get_gan_rankings(args.dataset, args.trial_num)
+    avg_csv_files(args.dataset)
