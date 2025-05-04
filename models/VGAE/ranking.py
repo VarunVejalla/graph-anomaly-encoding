@@ -13,6 +13,8 @@ import pickle
 import matplotlib.pyplot as plt
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+torch.serialization.register_package(0, lambda x: x.device.type, lambda x, _: x.cpu())
+
 
 def get_score(anomaly_ranking, true_one_hot_repr):
     # print(len(anomaly_ranking))
@@ -76,7 +78,7 @@ def make_plot(anomaly_type = "all", ds = "all", tn = -1):
             true_one_hot_repr = torch.zeros(data.x.size(0))
             true_one_hot_repr[all_anomalies] = 1
 
-            print(max(set(all_anomalies)), data.x.size(0))
+            # print(max(set(all_anomalies)), data.x.size(0))
 
             # def evaluate(actual_anomalies, anomaly_ranking, num_anomalies):
             #     # return precision, recall, F1, and inversion score
@@ -88,7 +90,7 @@ def make_plot(anomaly_type = "all", ds = "all", tn = -1):
 
             num_anomalies = len(all_anomalies)
 
-            print(rankings.keys())
+            # print(rankings.keys())
 
             # pred_one_hot_repr = torch.zeros(data.x.size(0))
 
@@ -122,16 +124,23 @@ def make_plot(anomaly_type = "all", ds = "all", tn = -1):
         plt.plot(embedding_dims, metric_scores, label=metric)
     
     if tn == -1:
-        plt.title(f'{dataset} - {anomaly_type} anomalies, all trials')
+        plt.title(f'All Datasets - {anomaly_type[0].upper() + anomaly_type[1:]} Anomalies')
     else:
-        plt.title(f'{dataset} - {anomaly_type} anomalies, trial {tn}')
+        plt.title(f'All Datasets - {anomaly_type[0].upper() + anomaly_type[1:]} Anomalies, trial {tn}')
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
 
     plt.savefig(f"images/{ds}_{tn}_{anomaly_type}.png")
+    return avg_scores
 
-for anomaly_type in ["all", "attribute", "structural"]:
-    for ds in ["all", "citeseer", "cora", "pubmed"]:
+for anomaly_type in ["attribute", "structural", "all"]:
+    for ds in ["all"]:
         for tn in [-1]:
-            make_plot(anomaly_type, ds, tn)
+            print(anomaly_type, ds)
+            res = make_plot(anomaly_type, ds, tn)
+            plt.close()
+            # print(anomaly_type, ds)
+            # print("reconstruction", sum(res["reconstruction"][1])/len(res["reconstruction"][1]))
+            # print("mean_diff", sum(res["mean_diff"][1])/len(res["mean_diff"][1]))
+            
